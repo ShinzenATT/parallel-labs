@@ -5,16 +5,16 @@ To enter erlang shell
 ````
 
 Change directory while in shell
-````bash
+````erlang
     cd(directory).
 ````
 
 To compile while in shell
-````bash
+````erlang
     c(filename).
 ````
 
 To run erlang while in shell
-````bash
+````erlang
     filename:function().
 ````
