@@ -2,9 +2,12 @@ package lab1;
 
 import TSim.*;
 
+import java.awt.*;
 import java.awt.geom.Point2D;
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
+import java.util.Objects;
 import java.util.concurrent.Semaphore;
 
 /**
@@ -30,12 +33,14 @@ public class Lab1 {
      */
     public Lab1(int speed1, int speed2) {
         tsi = TSimInterface.getInstance();
+        //sensorActions.setSwitch(2,3,TSimInterface.SWITCH_LEFT);
+
 
         // index the rail elements and sensors
-        sensorActions.add(new RailSwitch());
-        sensorActions.add(new RailSwitch());
-        sensorActions.add(new RailSwitch());
-        sensorActions.add(new RailSwitch());
+        //sensorActions.add(new RailSwitch());
+        //sensorActions.add(new RailSwitch());
+        //sensorActions.add(new RailSwitch());
+        //sensorActions.add(new RailSwitch());
 
         // start trains
         Train t1 = new Train(1, speed1);
@@ -74,7 +79,14 @@ public class Lab1 {
         public void run() {
             try {
                 while (true) {
-                    System.out.println(tsi.getSensor(trainId).toString());
+                    SensorEvent sensor = tsi.getSensor(trainId);
+                    System.out.println(sensor.toString());
+                    Point2D pnt = new Point(sensor.getXpos(), sensor.getYpos());
+
+                    var acts = sensorActions.stream().filter((a) -> a.getAssociatedSensors().contains(pnt));
+                    for (Iterator<SensorAction> it = acts.iterator(); it.hasNext(); ) {
+                        it.next().act(this);
+                    }
                 }
             } catch (CommandException | InterruptedException e) {
                 e.printStackTrace();
@@ -140,15 +152,27 @@ public class Lab1 {
      * @see Semaphore
      */
     public class RailSwitch extends Semaphore implements SensorAction{
+        private List<Sensor> associatedSensors;
+        private int x, y;
+        private Train acquiredTrain = null;
+        private int switchState = 0x01;
+
 
         /**
          * The constructor of the rail switch. It sets the number of permits to 1.
          * And saves the coordinates of the sensors.
          * @param sensors the coordinates of the sensors that are connected to the switch.
          */
-        public RailSwitch(Point2D ...sensors) {
+        public RailSwitch(int xpos, int ypos, Sensor ...sensors) {
             super(1);
-            associatedSensors.addAll(List.of(sensors));
+            associatedSensors = List.of(sensors);
+            x = xpos;
+            y = ypos;
+        }
+
+        @Override
+        public List<Sensor> getAssociatedSensors() {
+            return associatedSensors;
         }
 
         /**
@@ -157,9 +181,60 @@ public class Lab1 {
          * @param train The train that caused the sensor event.
          */
         @Override
-        public void act(Train train) {
+        public void act(Train train, boolean opposite){
 
+                try {
+                    if(train.equals(acquiredTrain)){
+                        toggleSwitch();
+                        release();
+                        return;
+                    }
 
+                    if(!tryAcquire()){
+                        train.setSpeed(0);
+                        acquire();
+                    }
+
+                    if(opposite && switchState != TSimInterface.SWITCH_LEFT){
+                        toggleSwitch();
+                    }
+
+                }catch (CommandException e){
+                    e.printStackTrace();
+                    release();
+                }catch (InterruptedException e){
+                    e.printStackTrace();
+                    train.interrupt();
+                }
+            }
+
+            public void toggleSwitch() throws CommandException{
+                if(switchState == 0x01){
+                    switchState = 0x02;
+                } else {
+                    switchState = 0x01;
+                }
+
+                tsi.setSwitch(x, y, switchState);
+            }
+
+        public void acquire(Train train) throws InterruptedException {
+            super.acquire();
+            acquiredTrain = train;
+        }
+
+        public boolean tryAcquire(Train train) {
+            if(super.tryAcquire()) {
+                acquiredTrain = train;
+                return true;
+            }
+            return false;
+        }
+
+        @Override
+        public void release() {
+            acquiredTrain = null;
+            super.release();
         }
     }
 
@@ -167,15 +242,51 @@ public class Lab1 {
      * An interface for linking multiple sensors to a single action.
      */
     public interface SensorAction {
+
         /**
-         * The list of sensors that are connected to the action.
+         * Gets the associated sensors for this action
+         * @return A list of sensor cordinates
          */
-        public List<Point2D> associatedSensors = new ArrayList<>();
+        List<Sensor> getAssociatedSensors();
 
         /**
          * The method that is called when a sensor event occurs.
          * @param train The train that caused the sensor event.
          */
-        void act(Train train);
+        void act(Train train, boolean opposite);
+
+        default void act(Train train){
+            act(train, false);
+        }
+    }
+
+    public class Sensor{
+         public final int prefferedSwitchState;
+         public final int x,y;
+
+        Sensor(int x, int y, int switchState){
+            this.x = x;
+            this.y = y;
+            this.prefferedSwitchState = switchState;
+        }
+
+        Sensor(int x, int y){
+            this.x = x;
+            this.y = y;
+            this.prefferedSwitchState = 0;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            Sensor sensor = (Sensor) o;
+            return x == sensor.x && y == sensor.y;
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(x, y);
+        }
     }
 }
