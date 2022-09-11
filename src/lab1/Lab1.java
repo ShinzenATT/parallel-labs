@@ -2,13 +2,13 @@ package lab1;
 
 import TSim.*;
 
-import java.awt.*;
-import java.awt.geom.Point2D;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Objects;
-import java.util.concurrent.Semaphore;
+import  java.util.concurrent.Semaphore;
+import static TSim.TSimInterface.*;
+import static java.lang.Thread.sleep;
 
 /**
  * Lab 1: Train control system
@@ -37,10 +37,59 @@ public class Lab1 {
 
 
         // index the rail elements and sensors
-        //sensorActions.add(new RailSwitch());
-        //sensorActions.add(new RailSwitch());
-        //sensorActions.add(new RailSwitch());
-        //sensorActions.add(new RailSwitch());
+        sensorActions.add(new RailSemaphore(
+            new Sensor(14, 7),
+            new Sensor(14, 8),
+            new Sensor(12, 9),
+            new Sensor(12, 10)
+        ));
+        sensorActions.add(new RailSemaphore(
+            new Sensor(6, 6),
+            new Sensor(8, 6),
+            new Sensor(10, 7),
+            new Sensor(10, 8)
+        ));
+        sensorActions.add(new RailSemaphore(
+            new Sensor(7, 9),
+            new Sensor(7, 10),
+            new Sensor(6, 11),
+            new Sensor(3, 13)
+        ));
+
+        sensorActions.add(new RailSwitch(17,7,
+            new Sensor(14, 7, SWITCH_RIGHT),
+            new Sensor(14, 8, SWITCH_LEFT),
+            new Sensor(19, 9, 0)
+        ));
+        sensorActions.add(new RailSwitch(15,9,
+            new Sensor(12, 9, SWITCH_RIGHT),
+            new Sensor(12, 10, SWITCH_LEFT),
+            new Sensor(19, 9, 0)
+        ));
+        sensorActions.add(new RailSwitch(4,9,
+            new Sensor(1, 10, 0),
+            new Sensor(7, 10, SWITCH_RIGHT),
+            new Sensor(7, 9, SWITCH_LEFT)
+        ));
+        sensorActions.add(new RailSwitch(3,11,
+            new Sensor(1, 10, 0),
+            new Sensor(6, 11, SWITCH_LEFT),
+            new Sensor(3, 13, SWITCH_RIGHT)
+        ));
+
+
+        sensorActions.add(new RailDeadend( false,
+            new Sensor(16, 3)
+        ));
+        sensorActions.add(new RailDeadend( true,
+            new Sensor(16, 5)
+        ));
+        sensorActions.add(new RailDeadend( false,
+            new Sensor(16, 11)
+        ));
+        sensorActions.add(new RailDeadend( true,
+            new Sensor(15, 13)
+        ));
 
         // start trains
         Train t1 = new Train(1, speed1);
@@ -55,7 +104,7 @@ public class Lab1 {
      */
     public class Train extends Thread implements Runnable {
         /** The default speed of the train. */
-        final int startSpeed;
+        int startSpeed;
         /** The id of the train. */
         final int trainId;
 
@@ -77,19 +126,26 @@ public class Lab1 {
          */
         @Override
         public void run() {
-            try {
-                while (true) {
-                    SensorEvent sensor = tsi.getSensor(trainId);
-                    System.out.println(sensor.toString());
-                    Point2D pnt = new Point(sensor.getXpos(), sensor.getYpos());
+            while (true) {
+                try {
 
-                    var acts = sensorActions.stream().filter((a) -> a.getAssociatedSensors().contains(pnt));
-                    for (Iterator<SensorAction> it = acts.iterator(); it.hasNext(); ) {
-                        it.next().act(this);
+                    SensorEvent sensor = tsi.getSensor(trainId);
+
+                    if(sensor.getStatus() == SensorEvent.ACTIVE) {
+                        System.out.println(sensor);
+                        Sensor pnt = new Sensor(sensor.getXpos(), sensor.getYpos());
+
+                        var acts = sensorActions.stream().filter((a) -> a.getAssociatedSensors().contains(pnt));
+                        for (Iterator<SensorAction> it = acts.iterator(); it.hasNext(); ) {
+                            SensorAction act = it.next();
+                            Sensor s = act.getAssociatedSensors().get(act.getAssociatedSensors().indexOf(pnt));
+                            act.act(this, s.preferredSwitchState);
+                        }
                     }
+
+                } catch (CommandException | InterruptedException e) {
+                    e.printStackTrace();
                 }
-            } catch (CommandException | InterruptedException e) {
-                e.printStackTrace();
             }
         }
 
@@ -114,12 +170,17 @@ public class Lab1 {
             }
         }
 
+        public void inverseSpeed() {
+            startSpeed = -startSpeed;
+            setSpeed();
+        }
+
         /**
          * Starts the train thread and sets the speed of the train to the default speed.
          * @see Thread#start()
          */
         @Override
-        public synchronized void start() {
+        public void start() {
             super.start();
 
             try {
@@ -143,6 +204,19 @@ public class Lab1 {
 
             super.interrupt();
         }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            Train train = (Train) o;
+            return trainId == train.trainId;
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(trainId);
+        }
     }
 
     /**
@@ -155,7 +229,7 @@ public class Lab1 {
         private List<Sensor> associatedSensors;
         private int x, y;
         private Train acquiredTrain = null;
-        private int switchState = 0x01;
+        private int switchState = 0x00;
 
 
         /**
@@ -181,23 +255,28 @@ public class Lab1 {
          * @param train The train that caused the sensor event.
          */
         @Override
-        public void act(Train train, boolean opposite){
-
+        public void act(Train train, int preferredSwitchState) {
                 try {
                     if(train.equals(acquiredTrain)){
                         toggleSwitch();
                         release();
+                        System.out.println("released " + train.trainId);
                         return;
                     }
 
-                    if(!tryAcquire()){
+                    if(!tryAcquire(train)){
                         train.setSpeed(0);
-                        acquire();
+                        System.out.println("waiting " + train.trainId);
+                        acquire(train);
+                        train.setSpeed();
                     }
 
-                    if(opposite && switchState != TSimInterface.SWITCH_LEFT){
-                        toggleSwitch();
+                    if(preferredSwitchState > 0 && preferredSwitchState != switchState){
+                        tsi.setSwitch(x, y, preferredSwitchState);
+                        System.out.println("switched " + train.trainId + " to " + preferredSwitchState);
                     }
+
+                    System.out.println("acquired " + train.trainId);
 
                 }catch (CommandException e){
                     e.printStackTrace();
@@ -216,7 +295,10 @@ public class Lab1 {
                 }
 
                 tsi.setSwitch(x, y, switchState);
+                System.out.println("switched " + switchState);
             }
+
+
 
         public void acquire(Train train) throws InterruptedException {
             super.acquire();
@@ -238,6 +320,104 @@ public class Lab1 {
         }
     }
 
+    public class RailSemaphore extends Semaphore implements SensorAction {
+        private List<Sensor> associatedSensors;
+        private Train acquiredTrain = null;
+
+        /**
+         * The constructor of the rail switch. It sets the number of permits to 1.
+         * And saves the coordinates of the sensors.
+         * @param sensors the coordinates of the sensors that are connected to the switch.
+         */
+        public RailSemaphore(Sensor... sensors) {
+            super(1);
+            associatedSensors = List.of(sensors);
+        }
+
+        @Override
+        public List<Sensor> getAssociatedSensors() {
+            return associatedSensors;
+        }
+
+        @Override
+        public void act(Train train, int preferredState) {
+            try {
+                if(train.equals(acquiredTrain)){
+                    release();
+                    System.out.println("released semaphore " + train.trainId);
+                    return;
+                }
+
+                if(!tryAcquire(train)){
+                    train.setSpeed(0);
+                    System.out.println("waiting semaphore " + train.trainId);
+                    acquire(train);
+                    train.setSpeed();
+                }
+
+                System.out.println("acquired semaphore " + train.trainId);
+
+
+            }/*catch (CommandException e){
+                e.printStackTrace();
+                release();
+            }*/catch (InterruptedException e){
+                e.printStackTrace();
+                train.interrupt();
+            }
+        }
+
+        public void acquire(Train train) throws InterruptedException {
+            super.acquire();
+            acquiredTrain = train;
+        }
+
+        public boolean tryAcquire(Train train) {
+            if(super.tryAcquire()) {
+                acquiredTrain = train;
+                return true;
+            }
+            return false;
+        }
+
+        @Override
+        public void release() {
+            acquiredTrain = null;
+            super.release();
+        }
+    }
+
+    public class RailDeadend implements SensorAction{
+        private final List<Sensor> associatedSensors;
+        private final long waitMod;
+
+        public RailDeadend(boolean isStation, Sensor... sensors){
+            associatedSensors = List.of(sensors);
+            if(isStation){
+                waitMod = 1000;
+            } else {
+                waitMod = 200;
+            }
+        }
+
+        @Override
+        public List<Sensor> getAssociatedSensors() {
+            return associatedSensors;
+        }
+
+        @Override
+        public void act(Train train, int preferredState) {
+            train.setSpeed(0);
+            try {
+                sleep(waitMod + Math.abs(train.startSpeed) * 20L);
+            }catch (InterruptedException e){
+                e.printStackTrace();
+            }
+
+            train.inverseSpeed();
+        }
+    }
+
     /**
      * An interface for linking multiple sensors to a single action.
      */
@@ -253,27 +433,27 @@ public class Lab1 {
          * The method that is called when a sensor event occurs.
          * @param train The train that caused the sensor event.
          */
-        void act(Train train, boolean opposite);
+        void act(Train train, int preferredState);
 
         default void act(Train train){
-            act(train, false);
+            act(train, 0);
         }
     }
 
-    public class Sensor{
-         public final int prefferedSwitchState;
+    public static class Sensor{
+         public final int preferredSwitchState;
          public final int x,y;
 
         Sensor(int x, int y, int switchState){
             this.x = x;
             this.y = y;
-            this.prefferedSwitchState = switchState;
+            this.preferredSwitchState = switchState;
         }
 
         Sensor(int x, int y){
             this.x = x;
             this.y = y;
-            this.prefferedSwitchState = 0;
+            this.preferredSwitchState = 0;
         }
 
         @Override
