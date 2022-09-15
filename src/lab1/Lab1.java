@@ -185,7 +185,7 @@ public class Lab1 {
                         for (Iterator<SensorAction> it = acts.iterator(); it.hasNext(); ) {
                             SensorAction act = it.next();
                             Sensor s = act.getAssociatedSensors().get(act.getAssociatedSensors().indexOf(pnt));
-                            act.act(this, s.preferredSwitchState);
+                            act.act(this, s.direction);
                         }
                     }
 
@@ -337,7 +337,7 @@ public class Lab1 {
                     train.setSpeed();
                 }
 
-                // 
+                //
                 if (direction > 0 && direction != switchState) {
                     setSwitchState(direction);
                     System.out.println("switched " + train.trainId + " to " + direction);
@@ -503,7 +503,7 @@ public class Lab1 {
         }
 
         /**
-         * Releases the semaphore when the train exits and lets another train to acquire.
+         * Releases the semaphore when the train exits and lets another train acquire.
          * @see Semaphore#release()
          */
         @Override
@@ -521,9 +521,16 @@ public class Lab1 {
         private final List<Sensor> associatedSensors;
         /** the sleep duration modifier based on the isStation parameter in the constructor */
         private final long waitMod;
-        /** */
+        /** a lock used to prevent for trains flipping on program start,
+         * is true when isStation constructor parameter is false */
         private boolean initialLock = false;
 
+        /**
+         * The constructor of the rail dead end. It saves the coordinates of the sensors and sets the wait time + initial lock
+         * based on the isStation parameter.
+         * @param isStation is true when the dead end is a station, otherwise false
+         * @param sensors the sensors that are used to trigger this action
+         */
         public RailDeadEnd(boolean isStation, Sensor... sensors) {
             associatedSensors = List.of(sensors);
             if (isStation) {
@@ -539,6 +546,11 @@ public class Lab1 {
             return associatedSensors;
         }
 
+        /**
+         * Is called when a sensor event occurs. It will have the train wait a little and then switch directions.
+         * @param train The train that caused the sensor event.
+         * @param direction Unused parameter
+         */
         @Override
         public void act(Train train, int direction) {
             if(initialLock){
@@ -572,32 +584,62 @@ public class Lab1 {
 
         /**
          * The method that is called when a sensor event occurs.
-         *
          * @param train The train that caused the sensor event.
+         * @param direction The direction of the sensor event.
+         *                  This can be interpreted as the direction of the train or the direction of the sensor.
          */
         void act(Train train, int direction);
 
+        /**
+         * The method that is called when a sensor event occurs. The direction is set to 0.
+         * @param train The train that caused the sensor event.
+         * @see SensorAction#act(Train, int)
+         */
         default void act(Train train) {
             act(train, 0);
         }
     }
 
+    /**
+     * A class for storing the coordinates of a sensor. And a direction related to the sensor.
+     */
     public static class Sensor {
-        public final int preferredSwitchState;
+        /** This is a direction related to the sensor,
+         * this can be the direction to the train or a preferred rail switch state. */
+        public final int direction;
+        /** The coordinates of the sensor */
         public final int x, y;
 
+        /**
+         * Creates a new sensor with the given coordinates and direction.
+         * @param x the x coordinate of the sensor
+         * @param y the y coordinate of the sensor
+         * @param switchState the direction related to the sensor, it can  be 0,
+         * {@link TSimInterface#SWITCH_LEFT SWITCH_LEFT} or {@link TSimInterface#SWITCH_RIGHT SWITCH_RIGHT}
+         */
         Sensor(int x, int y, int switchState) {
             this.x = x;
             this.y = y;
-            this.preferredSwitchState = switchState;
+            this.direction = switchState;
         }
 
+        /**
+         * This creates a new sensor with the given coordinates and a direction of 0.
+         * @param x the x coordinate of the sensor
+         * @param y the y coordinate of the sensor
+         */
         Sensor(int x, int y) {
             this.x = x;
             this.y = y;
-            this.preferredSwitchState = 0;
+            this.direction = 0;
         }
 
+        /**
+         * This checks if the given sensor coordinates are equal to the coordinates of this sensor.
+         * @param o the sensor to compare to
+         * @return true if the coordinates are equal, otherwise false
+         * @see Object#equals(Object)
+         */
         @Override
         public boolean equals(Object o) {
             if (this == o) return true;
@@ -606,29 +648,47 @@ public class Lab1 {
             return x == sensor.x && y == sensor.y;
         }
 
-        @Override
-        public int hashCode() {
-            return Objects.hash(x, y);
-        }
-
+        /**
+         * This creates a string representation of the sensor by using the coordinates.
+         * @return a string in the format "(x,y)"
+         * @see Object#toString()
+         */
         @Override
         public String toString() {
             return "(" + x + ", " + y + ')';
         }
     }
 
+    /**
+     * A class for directing trains on to the fastest available rail otherwise it will pick an alternative rail.
+     */
     public class DualRailSemaphore extends Semaphore implements SensorAction {
+        /** the sensor(s) for triggering this action */
         private final List<Sensor> associatedSensors;
+        /** the rail switches to be controlled, rs2 is expected to be mirrored */
         private final RailSwitch rs1, rs2;
+        /** the acquired train */
         private Train acquiredTrain = null;
+        /** a simple lock mechanism for preventing the second train to acquire the semaphore on exit */
         private boolean changeLock = false;
+        /** this is used to prevent trains that start at stations to acquire on exit  */
         private Train intialTrain = null;
 
-        public DualRailSemaphore(Train intialTrain, RailSwitch rs1, RailSwitch rs2, Sensor... sensors) {
+        /**
+         * The constructor of the dual rail semaphore. It saves the coordinates of the sensors and the rail switches.
+         * @param initialTrain the train that starts at the station, can be null.
+         * @param rs1 the first rail switch to be controlled, this is expected to have the split to the right.
+         * @param rs2  the second rail switch to be controlled, this is expected to have the split to the left which
+         *             results in mirrored control.
+         * @param sensors the sensors that are used to trigger this action, the  direction  is  used to  determine
+         *                the direction of the train. {@link TSimInterface#SWITCH_LEFT SWITCH_LEFT} for controlling rs1
+         *                and {@link TSimInterface#SWITCH_RIGHT SWITCH_RIGHT} for controlling rs2.
+         */
+        public DualRailSemaphore(Train initialTrain, RailSwitch rs1, RailSwitch rs2, Sensor... sensors) {
             super(1);
             this.rs1 = rs1;
             this.rs2 = rs2;
-            this.intialTrain = intialTrain;
+            this.intialTrain = initialTrain;
             associatedSensors = List.of(sensors);
         }
 
@@ -645,11 +705,13 @@ public class Lab1 {
                 return;
             }
 
+            // this is used to prevent trains that start at stations to acquire on exit
             if(intialTrain == train){
                 intialTrain = null;
                 return;
             }
 
+            // this is used to prevent the second train to acquire the semaphore on exit
             if(changeLock){
                 changeLock = false;
                 System.out.println("unlocked dual semaphore " + associatedSensors.toString() + " for " + train.trainId);
@@ -659,17 +721,17 @@ public class Lab1 {
             try {
                 if (rs1 != null && direction == SWITCH_LEFT) {
                     if (tryAcquire(train)) {
-                        rs1.setSwitchState(SWITCH_LEFT);
+                        rs1.setSwitchState(SWITCH_LEFT); // sends the train to the main rail
                     } else{
-                        rs1.setSwitchState(SWITCH_RIGHT);
+                        rs1.setSwitchState(SWITCH_RIGHT); // sends the train to the alternative rail
                         System.out.println("switched dual semaphore " + associatedSensors.toString() + " for " + train.trainId);
                         changeLock = true;
                     }
                 } else if(rs2 != null && direction == SWITCH_RIGHT){
                     if (tryAcquire(train)) {
-                        rs2.setSwitchState(SWITCH_RIGHT);
+                        rs2.setSwitchState(SWITCH_RIGHT); // sends the train to the main rail
                     } else{
-                        rs2.setSwitchState(SWITCH_LEFT);
+                        rs2.setSwitchState(SWITCH_LEFT); // sends the train to the alternative rail
                         System.out.println("switched dual semaphore " + associatedSensors.toString() + " for " + train.trainId);
                         changeLock = true;
                     }
@@ -678,14 +740,13 @@ public class Lab1 {
                 e.printStackTrace();
             }
         }
-        public static int getReverseDirection(int direction){
-            if (direction == SWITCH_LEFT) {
-                return SWITCH_RIGHT;
-            } else {
-                return SWITCH_LEFT;
-            }
-        }
 
+        /**
+         * This tries to acquire the semaphore for the given train.
+         * @param train the train to acquire the semaphore for
+         * @return true if the semaphore was acquired, otherwise false
+         * @see Semaphore#tryAcquire()
+         */
         public boolean tryAcquire(Train train) {
             if(super.tryAcquire()){
                 acquiredTrain = train;
@@ -695,6 +756,10 @@ public class Lab1 {
             return false;
         }
 
+        /**
+         * This releases the semaphore and sets the acquired train to null.
+         * @see Semaphore#release()
+         */
         @Override
         public void release() {
             acquiredTrain = null;
