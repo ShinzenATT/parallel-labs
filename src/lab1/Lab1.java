@@ -23,6 +23,8 @@ public class Lab1 {
      * The list of rail elements such as switches, semaphores and deadends.
      *
      * @see RailSwitch
+     * @see RailSemaphore
+     * @see DualRailSemaphore
      */
     private final List<SensorAction> sensorActions = new ArrayList<>();
 
@@ -37,9 +39,11 @@ public class Lab1 {
     public Lab1(int speed1, int speed2) {
         tsi = TSimInterface.getInstance();
 
+        // Set up the trains
         Train t1 = new Train(1, speed1);
         Train t2 = new Train(2, speed2);
 
+        // Set up Railswitches depended by DualRailSemaphore and add DualRailSemaphores to list
         RailSwitch rs1707 = new RailSwitch(17, 7,
             new Sensor(14, 7, SWITCH_RIGHT),
             new Sensor(14, 8, SWITCH_LEFT),
@@ -86,7 +90,7 @@ public class Lab1 {
             new Sensor(1, 10, SWITCH_RIGHT)
         ));
 
-        // index the rail elements and sensors
+        // add all RailSemaphores
         sensorActions.add(new RailSemaphore(
             new Sensor(14, 7),
             new Sensor(14, 8),
@@ -106,22 +110,24 @@ public class Lab1 {
             new Sensor(6, 13)
         ));
 
+        // Add all RailSwitches
         sensorActions.add(rs1707);
         sensorActions.add(rs1509);
         sensorActions.add(rs0409);
         sensorActions.add(rs0311);
 
 
-        sensorActions.add(new RailDeadend(false,
+        // Add all RailDeadends
+        sensorActions.add(new RailDeadEnd(false,
             new Sensor(14, 3)
         ));
-        sensorActions.add(new RailDeadend(true,
+        sensorActions.add(new RailDeadEnd(true,
             new Sensor(14, 5)
         ));
-        sensorActions.add(new RailDeadend(false,
+        sensorActions.add(new RailDeadEnd(false,
             new Sensor(14, 11)
         ));
-        sensorActions.add(new RailDeadend(true,
+        sensorActions.add(new RailDeadEnd(true,
             new Sensor(14, 13)
         ));
 
@@ -133,7 +139,7 @@ public class Lab1 {
 
     /**
      * The class that handles the trains and starts their own threads. It will also call a relevant
-     * {@link SensorAction#act(Train)} when a sensor event occurs.
+     * {@link SensorAction#act(Train) SensorAction} when a sensor event occurs.
      */
     public class Train extends Thread implements Runnable {
         /**
@@ -174,6 +180,7 @@ public class Lab1 {
                         System.out.println(sensor);
                         Sensor pnt = new Sensor(sensor.getXpos(), sensor.getYpos());
 
+                        // filter out the list to only those that have the sensor associated and execute them
                         var acts = sensorActions.stream().filter((a) -> a.getAssociatedSensors().contains(pnt));
                         for (Iterator<SensorAction> it = acts.iterator(); it.hasNext(); ) {
                             SensorAction act = it.next();
@@ -211,6 +218,11 @@ public class Lab1 {
             }
         }
 
+        /**
+         * Makes the train go in reverse which effectively results in {@link Train#startSpeed startSpeed} being
+         * multiplied by -1. For this to work the train needs to have its speed to 0.
+         * @see Train#setSpeed(int)
+         */
         public void inverseSpeed() {
             startSpeed = startSpeed * -1;
             setSpeed();
@@ -249,17 +261,17 @@ public class Lab1 {
             super.interrupt();
         }
 
+        /**
+         * Check if the train id and class matches with the other object.
+         * @param o the object to be checked against
+         * @return a boolean that is true when the trainId is matched
+         */
         @Override
         public boolean equals(Object o) {
             if (this == o) return true;
             if (o == null || getClass() != o.getClass()) return false;
             Train train = (Train) o;
             return trainId == train.trainId;
-        }
-
-        @Override
-        public int hashCode() {
-            return Objects.hash(trainId);
         }
     }
 
@@ -271,9 +283,13 @@ public class Lab1 {
      * @see Semaphore
      */
     public class RailSwitch extends Semaphore implements SensorAction {
-        private List<Sensor> associatedSensors;
-        private int x, y;
+        /** the sensors to trigger the railswitch, sensors may contain preferred switch state */
+        private final List<Sensor> associatedSensors;
+        /** the cordinates of the switch */
+        private final int x, y;
+        /** the train that has acquired the resource, used to check if a train is exiting */
         private Train acquiredTrain = null;
+        /** the current state of the switch */
         private int switchState = SWITCH_LEFT;
 
 
@@ -296,14 +312,16 @@ public class Lab1 {
         }
 
         /**
-         * It is called when a sensor event occurs. It changes the built-in switch state based on the train and changes
-         * the train direction when the train is on the switch.
+         * It is called when a sensor event occurs. It changes the switch state based on where the rain enters and stops
+         * other trains from entering until the switch is released.
          *
          * @param train The train that caused the sensor event.
+         * @param direction the preferred switch state, if it is not 0 then it will change the switch to that state.
          */
         @Override
         public void act(Train train, int direction) {
             try {
+                // release the switch and toggle it
                 if (train.equals(acquiredTrain)) {
                     toggleSwitch();
                     release();
@@ -311,6 +329,7 @@ public class Lab1 {
                     return;
                 }
 
+                // try to acquire the switch, on fail stop the train and wait for it to be available
                 if (!tryAcquire(train)) {
                     train.setSpeed(0);
                     System.out.println("waiting (" + x + ',' + y + ") for " + train.trainId);
@@ -318,6 +337,7 @@ public class Lab1 {
                     train.setSpeed();
                 }
 
+                // 
                 if (direction > 0 && direction != switchState) {
                     setSwitchState(direction);
                     System.out.println("switched " + train.trainId + " to " + direction);
@@ -334,16 +354,26 @@ public class Lab1 {
             }
         }
 
+        /**
+         * Sets the switch state to the provided argument by sending it to the simulation and saves it in this object.
+         * @param switchState the state to change the switch to
+         * @throws CommandException is thrown when the simulation gives an error such as train on switch.
+         */
         public void setSwitchState(int switchState) throws CommandException {
             this.switchState = switchState;
             tsi.setSwitch(x, y, switchState);
         }
 
+        /**
+         * Toggles the switch to the opposite state, it the saved state is unknown then it defaults to
+         * {@link TSimInterface#SWITCH_LEFT SWITCH_LEFT}.
+         * @throws CommandException is thrown when simulation has an error such as train on switch.
+         */
         public void toggleSwitch() throws CommandException {
-            if (switchState == 0x01) {
-                switchState = 0x02;
+            if (switchState == SWITCH_LEFT) {
+                switchState = SWITCH_RIGHT;
             } else {
-                switchState = 0x01;
+                switchState = SWITCH_LEFT;
             }
 
             tsi.setSwitch(x, y, switchState);
@@ -351,11 +381,24 @@ public class Lab1 {
         }
 
 
+        /**
+         * Acquires the switch and saves which train that has acquired it. If no permits are available then the thread
+         * will be put to sleep until the switch is released.
+         * @param train the train that acquired the switch
+         * @throws InterruptedException is thrown when the thread is interrupted
+         * @see Semaphore#acquire()
+         */
         public void acquire(Train train) throws InterruptedException {
             super.acquire();
             acquiredTrain = train;
         }
 
+        /**
+         * Tries to acquire the switch, it will return true when the switch is acquired or false on fail.
+         * @param train the train that wants to acquire the switch
+         * @return returns true when acquiring the switch is successful otherwise false.
+         * @see Semaphore#tryAcquire()
+         */
         public boolean tryAcquire(Train train) {
             if (super.tryAcquire()) {
                 acquiredTrain = train;
@@ -364,6 +407,10 @@ public class Lab1 {
             return false;
         }
 
+        /**
+         * Releases the switch and allows the switch to be acquired by another train.
+         * @see Semaphore#release()
+         */
         @Override
         public void release() {
             acquiredTrain = null;
@@ -371,12 +418,18 @@ public class Lab1 {
         }
     }
 
+    /**
+     * A {@link SensorAction SensorAction} to handle crossings or paths that only one train can pass at the time.
+     * @see Semaphore
+     */
     public class RailSemaphore extends Semaphore implements SensorAction {
+        /** The list of sensors to track enter and exit of trains */
         private List<Sensor> associatedSensors;
+        /** the train that has acquired the resource */
         private Train acquiredTrain = null;
 
         /**
-         * The constructor of the rail switch. It sets the number of permits to 1.
+         * The constructor of the rail semaphore. It sets the number of permits to 1.
          * And saves the coordinates of the sensors.
          *
          * @param sensors the coordinates of the sensors that are connected to the switch.
@@ -391,15 +444,23 @@ public class Lab1 {
             return associatedSensors;
         }
 
+        /**
+         * Is called when a sensor event occurs. It will have the train acquire the semaphore until it has passed trough.
+         * If it fails to acquire then the train will stop and wait until it's available.
+         * @param train The train that caused the sensor event.
+         * @param direction Unused parameter
+         */
         @Override
         public void act(Train train, int direction) {
             try {
+                // release the semaphore when passed
                 if (train.equals(acquiredTrain)) {
                     release();
                     System.out.println("released semaphore " + associatedSensors.toString() + " for " + train.trainId);
                     return;
                 }
 
+                // tries to acquire, on fail the train stops and waits until its available
                 if (!tryAcquire(train)) {
                     train.setSpeed(0);
                     System.out.println("waiting semaphore " + associatedSensors.toString() + " for " + train.trainId);
@@ -410,20 +471,29 @@ public class Lab1 {
                 System.out.println("acquired semaphore " + associatedSensors.toString() + " for " + train.trainId);
 
 
-            }/*catch (CommandException e){
-                e.printStackTrace();
-                release();
-            }*/ catch (InterruptedException e) {
+            } catch (InterruptedException e) {
                 e.printStackTrace();
                 train.interrupt();
             }
         }
 
+        /**
+         * Acquires the semaphore, if none is available then the thread will be put to sleep until it's available.
+         * @param train the train that wants to acquire the semaphore
+         * @throws InterruptedException is thrown when the thread is interrupted
+         * @see Semaphore#acquire()
+         */
         public void acquire(Train train) throws InterruptedException {
             super.acquire();
             acquiredTrain = train;
         }
 
+        /**
+         * Tries to acquire the semaphore and returns true on success. Otherwise, false is returned.
+         * @param train the train that wants to acquire the semaphore
+         * @return true when the semaphore is acquired otherwise false
+         * @see Semaphore#tryAcquire()
+         */
         public boolean tryAcquire(Train train) {
             if (super.tryAcquire()) {
                 acquiredTrain = train;
@@ -432,6 +502,10 @@ public class Lab1 {
             return false;
         }
 
+        /**
+         * Releases the semaphore when the train exits and lets another train to acquire.
+         * @see Semaphore#release()
+         */
         @Override
         public void release() {
             acquiredTrain = null;
@@ -439,12 +513,18 @@ public class Lab1 {
         }
     }
 
-    public class RailDeadend implements SensorAction {
+    /**
+     * A {@link SensorAction SensorAction} for making a train switch directions.
+     */
+    public class RailDeadEnd implements SensorAction {
+        /** the sensor(s) for triggering this action */
         private final List<Sensor> associatedSensors;
+        /** the sleep duration modifier based on the isStation parameter in the constructor */
         private final long waitMod;
+        /** */
         private boolean initialLock = false;
 
-        public RailDeadend(boolean isStation, Sensor... sensors) {
+        public RailDeadEnd(boolean isStation, Sensor... sensors) {
             associatedSensors = List.of(sensors);
             if (isStation) {
                 waitMod = 1000;
