@@ -2,13 +2,11 @@ package lab1;
 
 import TSim.*;
 
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.Semaphore;
-import java.util.concurrent.TimeUnit;
 
 import static TSim.TSimInterface.*;
 import static java.lang.Thread.sleep;
@@ -39,16 +37,20 @@ public class Lab1 {
     public Lab1(int speed1, int speed2) {
         tsi = TSimInterface.getInstance();
 
+        Train t1 = new Train(1, speed1);
+        Train t2 = new Train(2, speed2);
+
         RailSwitch rs1707 = new RailSwitch(17, 7,
             new Sensor(14, 7, SWITCH_RIGHT),
             new Sensor(14, 8, SWITCH_LEFT),
             new Sensor(19, 9, 0)
-        );
+        );;
 
         sensorActions.add(new DualRailSemaphore(
+            t1,
             rs1707,
             null,
-            new Sensor(19, 9, SWITCH_RIGHT)
+            new Sensor(19, 9, SWITCH_LEFT)
         ));
 
         RailSwitch rs0409 = new RailSwitch(4, 9,
@@ -64,11 +66,26 @@ public class Lab1 {
         );
 
         sensorActions.add(new DualRailSemaphore(
-            rs1509,
+            null,
             rs0409,
-            new Sensor(19, 9, SWITCH_LEFT),
+            rs1509,
+            new Sensor(19, 9, SWITCH_RIGHT),
+            new Sensor(1, 10, SWITCH_LEFT)
+        ));
+
+        RailSwitch rs0311 = new RailSwitch(3, 11,
+            new Sensor(1, 10, 0),
+            new Sensor(6, 11, SWITCH_LEFT),
+            new Sensor(6, 13, SWITCH_RIGHT)
+        );
+
+        sensorActions.add(new DualRailSemaphore(
+            t2,
+            null,
+            rs0311,
             new Sensor(1, 10, SWITCH_RIGHT)
         ));
+
         // index the rail elements and sensors
         sensorActions.add(new RailSemaphore(
             new Sensor(14, 7),
@@ -86,38 +103,32 @@ public class Lab1 {
             new Sensor(7, 9),
             new Sensor(7, 10),
             new Sensor(6, 11),
-            new Sensor(4, 13)
+            new Sensor(6, 13)
         ));
 
         sensorActions.add(rs1707);
         sensorActions.add(rs1509);
         sensorActions.add(rs0409);
-
-        sensorActions.add(new RailSwitch(3, 11,
-            new Sensor(1, 10, 0),
-            new Sensor(6, 11, SWITCH_LEFT),
-            new Sensor(4, 13, SWITCH_RIGHT)
-        ));
+        sensorActions.add(rs0311);
 
 
         sensorActions.add(new RailDeadend(false,
-            new Sensor(16, 3)
+            new Sensor(14, 3)
         ));
         sensorActions.add(new RailDeadend(true,
-            new Sensor(16, 5)
+            new Sensor(14, 5)
         ));
         sensorActions.add(new RailDeadend(false,
-            new Sensor(16, 11)
+            new Sensor(14, 11)
         ));
         sensorActions.add(new RailDeadend(true,
-            new Sensor(15, 13)
+            new Sensor(14, 13)
         ));
 
         // start trains
-        Train t1 = new Train(1, speed1);
         t1.start();
-        Train t2 = new Train(2, speed2);
         t2.start();
+
     }
 
     /**
@@ -201,7 +212,7 @@ public class Lab1 {
         }
 
         public void inverseSpeed() {
-            startSpeed = -startSpeed;
+            startSpeed = startSpeed * -1;
             setSpeed();
         }
 
@@ -263,7 +274,7 @@ public class Lab1 {
         private List<Sensor> associatedSensors;
         private int x, y;
         private Train acquiredTrain = null;
-        private int switchState = 0x00;
+        private int switchState = SWITCH_LEFT;
 
 
         /**
@@ -431,6 +442,7 @@ public class Lab1 {
     public class RailDeadend implements SensorAction {
         private final List<Sensor> associatedSensors;
         private final long waitMod;
+        private boolean initialLock = false;
 
         public RailDeadend(boolean isStation, Sensor... sensors) {
             associatedSensors = List.of(sensors);
@@ -438,6 +450,7 @@ public class Lab1 {
                 waitMod = 1000;
             } else {
                 waitMod = 600;
+                initialLock = true;
             }
         }
 
@@ -448,6 +461,11 @@ public class Lab1 {
 
         @Override
         public void act(Train train, int direction) {
+            if(initialLock){
+                initialLock = false;
+                return;
+            }
+
             train.setSpeed(0);
             try {
                 sleep(waitMod + Math.abs(train.startSpeed) * 20L);
@@ -521,15 +539,16 @@ public class Lab1 {
 
     public class DualRailSemaphore extends Semaphore implements SensorAction {
         private final List<Sensor> associatedSensors;
-        private Train acquiredTrain = null;
         private final RailSwitch rs1, rs2;
-        private int globalSwitchState = SWITCH_LEFT;
+        private Train acquiredTrain = null;
         private boolean changeLock = false;
+        private Train intialTrain = null;
 
-        public DualRailSemaphore(RailSwitch rs1, RailSwitch rs2, Sensor... sensors) {
+        public DualRailSemaphore(Train intialTrain, RailSwitch rs1, RailSwitch rs2, Sensor... sensors) {
             super(1);
             this.rs1 = rs1;
             this.rs2 = rs2;
+            this.intialTrain = intialTrain;
             associatedSensors = List.of(sensors);
         }
 
@@ -540,55 +559,45 @@ public class Lab1 {
 
         @Override
         public void act(Train train, int direction) {
+            if(train.equals(acquiredTrain)){
+                release();
+                System.out.println("released dual semaphore " + associatedSensors.toString() + " for " + train.trainId);
+                return;
+            }
+
+            if(intialTrain == train){
+                intialTrain = null;
+                return;
+            }
+
+            if(changeLock){
+                changeLock = false;
+                System.out.println("unlocked dual semaphore " + associatedSensors.toString() + " for " + train.trainId);
+                return;
+            }
+
             try {
-                if (train.equals(acquiredTrain)) {
-                    release();
-
-                    System.out.println("released dual rail " + associatedSensors.toString() + " for " + train.trainId);
-                    return;
-                }
-
-                if (!changeLock && !tryAcquire(train)) {
-                    changeLock = true;
-                    if(rs1 == null || rs2 == null){
-                        toggleGlobalSwitch();
-                        System.out.println("Switched dual rail " + associatedSensors.toString() + " for " + train.trainId);
+                if (rs1 != null && direction == SWITCH_LEFT) {
+                    if (tryAcquire(train)) {
+                        rs1.setSwitchState(SWITCH_LEFT);
+                    } else{
+                        rs1.setSwitchState(SWITCH_RIGHT);
+                        System.out.println("switched dual semaphore " + associatedSensors.toString() + " for " + train.trainId);
+                        changeLock = true;
                     }
-                } else if(changeLock){
-                    changeLock = false;
-                    System.out.println("removed change lock " + associatedSensors.toString() + " for " + train.trainId);
-                }
-
-                if(rs1 != null && rs2 != null){
-                    // the switch to the left
-                    if(direction == SWITCH_RIGHT) {
-                        rs1.setSwitchState(rs2.switchState);
-                        System.out.println("Routine switched dual rail " + associatedSensors.toString() + " to " + SWITCH_RIGHT);
-                    } else if (direction == SWITCH_LEFT) {
-                        rs2.setSwitchState(rs1.switchState);
-                        System.out.println("Routine switched dual rail " + associatedSensors.toString() + " to " + SWITCH_LEFT);
+                } else if(rs2 != null && direction == SWITCH_RIGHT){
+                    if (tryAcquire(train)) {
+                        rs2.setSwitchState(SWITCH_RIGHT);
+                    } else{
+                        rs2.setSwitchState(SWITCH_LEFT);
+                        System.out.println("switched dual semaphore " + associatedSensors.toString() + " for " + train.trainId);
+                        changeLock = true;
                     }
                 }
-
             } catch (CommandException e) {
                 e.printStackTrace();
-                release();
-            } catch (InterruptedException e) {
-                train.interrupt();
-                e.printStackTrace();
             }
         }
-
-        public void toggleGlobalSwitch() throws CommandException {
-            if (globalSwitchState == SWITCH_LEFT) {
-                globalSwitchState = SWITCH_RIGHT;
-            } else {
-                globalSwitchState = SWITCH_LEFT;
-            }
-
-            setGlobalSwitchState();
-        }
-
         public static int getReverseDirection(int direction){
             if (direction == SWITCH_LEFT) {
                 return SWITCH_RIGHT;
@@ -597,39 +606,17 @@ public class Lab1 {
             }
         }
 
-        public void setGlobalSwitchState(int state) throws CommandException {
-            globalSwitchState = state;
-            if(rs1 != null) {
-                rs1.setSwitchState(state);
-            }
-            if (rs2 != null) {
-                if(state == SWITCH_LEFT){
-                    rs2.setSwitchState(SWITCH_RIGHT);
-                } else {
-                    rs2.setSwitchState(SWITCH_LEFT);
-                }
-            }
-        }
-
-        public void setGlobalSwitchState() throws CommandException {
-            setGlobalSwitchState(globalSwitchState);
-        }
-
-        public void acquire(Train train) throws InterruptedException {
-            super.acquire();
-            acquiredTrain = train;
-        }
-
-        public boolean tryAcquire(Train train) throws InterruptedException {
-            if (super.tryAcquire()) {
+        public boolean tryAcquire(Train train) {
+            if(super.tryAcquire()){
                 acquiredTrain = train;
-                System.out.println("acquired dual rail " + associatedSensors.toString() + " for " + train.trainId);
+                System.out.println("acquired dual semaphore " + associatedSensors.toString() + " for " + train.trainId);
                 return true;
             }
             return false;
         }
 
-        public void release(Train train) {
+        @Override
+        public void release() {
             acquiredTrain = null;
             super.release();
         }
