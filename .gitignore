@@ -1,3 +1,4 @@
 .idea
 out
 erlang/*.beam
+erlang/**/*.beam
