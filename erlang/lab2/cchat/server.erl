@@ -8,11 +8,12 @@ start(ServerAtom) ->
     % - Spawn a new process which waits for a message, handles it, then loops infinitely
     % - Register this process to ServerAtom
     % - Return the process ID
-    not_implemented.
+    genserver:start(ServerAtom, fun handler/2).
 
 % Stop the server process registered to the given name,
 % together with any other associated processes
 stop(ServerAtom) ->
     % TODO Implement function
     % Return ok
-    not_implemented.
+    genserver:request(ServerAtom),
+    genserver:stop(ServerAtom).
