@@ -1,0 +1,7 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="Run Cchat" type="CompoundRunConfigurationType">
+    <toRun name="Run GUI" type="ShConfigurationType" />
+    <toRun name="Run server" type="ShConfigurationType" />
+    <method v="2" />
+  </configuration>
+</component>

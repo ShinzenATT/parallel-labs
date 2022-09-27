@@ -2,3 +2,4 @@
 out
 erlang/*.beam
 erlang/**/*.beam
+**/erl_crash.dump
