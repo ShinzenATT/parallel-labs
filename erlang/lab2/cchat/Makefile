@@ -2,6 +2,10 @@ all: *.erl lib/*.erl
 	make -C lib
 	erl -compile *.erl lib/*.erl
 
+terminal: *.erl lib-term/*.erl
+	make -C lib-term
+	erl -compile *.erl lib-term/*.erl
+
 clean:
 	rm -f *.beam *.dump
 

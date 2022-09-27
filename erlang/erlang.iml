@@ -7,7 +7,9 @@
   </component>
   <component name="NewModuleRootManager" inherit-compiler-output="true">
     <exclude-output />
-    <content url="file://$MODULE_DIR$/lab2/cchat" />
+    <content url="file://$MODULE_DIR$/lab2/cchat">
+      <sourceFolder url="file://$MODULE_DIR$/lab2/cchat/lib" type="erlang-include" />
+    </content>
     <orderEntry type="jdk" jdkName="Erlang 25" jdkType="Erlang SDK" />
     <orderEntry type="sourceFolder" forTests="false" />
   </component>
