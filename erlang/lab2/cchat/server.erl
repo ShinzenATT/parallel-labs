@@ -21,9 +21,8 @@ start(ServerAtom) ->
     % - Return the process ID
     io:fwrite("Server started ~n"),
     io:fwrite("ServerAtom: ~p~n", [ServerAtom]),
-    Pid = genserver:start(ServerAtom, initialState(), handle),
-    io:fwrite("Pid: ~p~n", [Pid]),
-    io:fwrite(whereis(ServerAtom)).
+    Pid = genserver:start(ServerAtom, initialState(), fun handle/2),
+    io:fwrite("Pid: ~p~n", [Pid]).
 
 
 % Stop the server process registered to the given name,
@@ -33,7 +32,7 @@ stop(ServerAtom) ->
     genserver:request(ServerAtom, stop),
     genserver:stop(ServerAtom).
 
-handle(_, _) ->
+handle(St, Data) ->
     % TODO Implement function
     % Return ok
     io:fwrite("Recieved from client ~n"),

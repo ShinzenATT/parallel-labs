@@ -35,7 +35,6 @@ handle(St, {join, Channel}) ->
 
     %case lists:member(Channel, St#client_st.chatroom) of
      %   true ->
-            io:fwrite(whereis(St#client_st.server)),
             Result = genserver:request(St#client_st.server, {join, Channel, self()}),
             case Result of
 
