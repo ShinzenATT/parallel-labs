@@ -32,24 +32,44 @@ initial_state(Nick, GUIAtom, ServerAtom) ->
 handle(St, {join, Channel}) ->
     % TODO: Implement this function
     % {reply, ok, St} ;
-    Res = genserver:request(server, {join, St#client_st.nick, Channel}),
-    case Res of
-        ok ->
-            {reply, ok, St#client_st{chatroom = [St#client_st.chatroom | Channel]}};
-        true ->
-            {reply, {error, join, "Error joining channel"}, St}
-    end;
+
+    %case lists:member(Channel, St#client_st.chatroom) of
+     %   true ->
+            io:fwrite(whereis(St#client_st.server)),
+            Result = genserver:request(St#client_st.server, {join, Channel, self()}),
+            case Result of
+
+                ok ->
+                    {reply, ok, St#client_st{chatroom = [Channel | St#client_st.chatroom]}};
+                failed -> {reply, {error, user_already_joined, "User already joined channel"}, St}
+            end;
+
+      %  false -> {reply, {error, server_not_reached, "Server not reached"}, St}
+    %end;
+
+
+%    Res = genserver:request(server, {join, St#client_st.server, {join, Channel, self()}}),
+ %   case Res of
+  %      ok ->
+   %    true ->
+    %        {reply, {error, join, "Error joining channel"}, St};
+     %   failed ->
+      %      {reply, {error, user_already_joined, "Already in channel"}, St};
+       % false -> {reply, {error, server_not_reached, "server not availible"}, St}
+    %end;
+
+
 
 % Leave channel
 handle(St, {leave, Channel}) ->
-    % TODO: Implement this function
-    % {reply, ok, St} ;
-    {reply, {error, not_implemented, "leave not implemented"}, St} ;
+% TODO: Implement this function
+% {reply, ok, St} ;
+    {reply, {error, not_implemented, "leave not implemented"}, St};
 
 % Sending message (from GUI, to channel)
 handle(St, {message_send, Channel, Msg}) ->
-    % TODO: Implement this function
-    % {reply, ok, St} ;
+% TODO: Implement this function
+% {reply, ok, St} ;
     Res = genserver:request(St#client_st.server, {message_send, Channel, St#client_st.nick, Msg, self()}),
     case Res of
         ok ->
@@ -78,7 +98,7 @@ handle(St = #client_st{gui = GUI}, {message_receive, Channel, Nick, Msg}) ->
 
 % Quit client via GUI
 handle(St, quit) ->
-    % Any cleanup should happen here, but this is optional
+% Any cleanup should happen here, but this is optional
     {reply, ok, St};
 
 % Catch-all for any unhandled requests
