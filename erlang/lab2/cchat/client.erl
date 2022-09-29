@@ -34,42 +34,49 @@ handle(St, {join, Channel}) ->
     % {reply, ok, St} ;
 
     %case lists:member(Channel, St#client_st.chatroom) of
-     %   true ->
-            Result = genserver:request(St#client_st.server, {join, Channel, self()}),
-            case Result of
+    %   true ->
+    Result = genserver:request(St#client_st.server, {join, Channel, self()}),
+    case Result of
+        ok ->
+            ChatRoomList = [Channel | St#client_st.chatroom],
+            {reply, ok, St#client_st{chatroom = ChatRoomList}};
+        true ->
+            {reply, {error, user_already_joined, "User already joined channel"}, St}
+    end;
 
-                ok ->
-                    {reply, ok, St#client_st{chatroom = [Channel | St#client_st.chatroom]}};
-                failed -> {reply, {error, user_already_joined, "User already joined channel"}, St}
-            end;
-
-      %  false -> {reply, {error, server_not_reached, "Server not reached"}, St}
-    %end;
+%  false -> {reply, {error, server_not_reached, "Server not reached"}, St}
+%end;
 
 
 %    Res = genserver:request(server, {join, St#client_st.server, {join, Channel, self()}}),
- %   case Res of
-  %      ok ->
-   %    true ->
-    %        {reply, {error, join, "Error joining channel"}, St};
-     %   failed ->
-      %      {reply, {error, user_already_joined, "Already in channel"}, St};
-       % false -> {reply, {error, server_not_reached, "server not availible"}, St}
-    %end;
-
+%   case Res of
+%      ok ->
+%    true ->
+%        {reply, {error, join, "Error joining channel"}, St};
+%   failed ->
+%      {reply, {error, user_already_joined, "Already in channel"}, St};
+% false -> {reply, {error, server_not_reached, "server not availible"}, St}
+%end;
 
 
 % Leave channel
 handle(St, {leave, Channel}) ->
 % TODO: Implement this function
 % {reply, ok, St} ;
-    {reply, {error, not_implemented, "leave not implemented"}, St};
+    Result = genserver:request(list_to_atom(Channel), {leave, self()}),
+    case Result of
+        ok ->
+            ChatRoomList = lists:delete(Channel, St#client_st.chatroom),
+            {reply, ok, St#client_st{chatroom = ChatRoomList}};
+        true ->
+            {reply, {error, user_not_joined, "User has not joined server"}}
+    end;
 
 % Sending message (from GUI, to channel)
 handle(St, {message_send, Channel, Msg}) ->
 % TODO: Implement this function
 % {reply, ok, St} ;
-    Res = genserver:request(St#client_st.server, {message_send, Channel, St#client_st.nick, Msg, self()}),
+    Res = genserver:request(list_to_atom(Channel), {message_send, St#client_st.nick, Msg, self()}),
     case Res of
         ok ->
             {reply, ok, St};
