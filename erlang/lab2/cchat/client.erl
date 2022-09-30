@@ -40,7 +40,7 @@ handle(St, {join, Channel}) ->
         ok ->
             ChatRoomList = [Channel | St#client_st.chatroom],
             {reply, ok, St#client_st{chatroom = ChatRoomList}};
-        true ->
+        user_already_joined ->
             {reply, {error, user_already_joined, "User already joined channel"}, St}
     end;
 

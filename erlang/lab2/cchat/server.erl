@@ -76,11 +76,15 @@ channelHandle(St, {leave, Client}) ->
     case lists:member(Client, St#channelSt.users) of
         true ->
             NewUsers = lists:delete(Client, St#channelSt.users),
+            io:fwrite("Channel ~p: ~p left ~n", [St#channelSt.name, Client]),
             {reply,ok , St#channelSt{users = NewUsers}};
         false ->
             {reply, user_not_joined, St}
 
     end;
+
+channelHandle(St, {message_send, Nick, Msg, Client}) ->
+
 
 
 channelHandle(St,  Data) ->
