@@ -72,8 +72,21 @@ channelHandle(St, {join, Client}) ->
             {reply, ok, St#channelSt{users = [Client | St#channelSt.users]}}
     end;
 
+channelHandle(St, {leave, Client}) ->
+    case lists:member(Client, St#channelSt.users) of
+        true ->
+            NewUsers = lists:delete(Client, St#channelSt.users),
+            {reply,ok , St#channelSt{users = NewUsers}};
+        false ->
+            {reply, user_not_joined, St}
+
+    end;
+
+
 channelHandle(St,  Data) ->
     io:fwrite("Channel ~p: Unknown command with data, ~p ~n", [St#channelSt.name, Data]),
     {reply, unknown_command, St}.
+
+
 
 % cd erlang/lab2/cchat && erl -compile *.erl lib/*.erl && erl -noshell -eval "cchat:server()." -eval "cchat:client()."
