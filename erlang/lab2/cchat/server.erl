@@ -1,5 +1,5 @@
 -module(server).
--export([start/1,stop/1]).
+-export([start/1, stop/1]).
 
 -record(state, {
     nicknames,
@@ -55,7 +55,7 @@ handle(St, {join, Channel, Client}) ->
             io:fwrite("Server: Created channel ~p with Pid ~p~n", [Channel, Pid]),
             Result = genserver:request(list_to_atom(Channel), {join, Client}),
             {reply, Result, St#state{channels = [Channel | St#state.channels]}}
-        end;
+    end;
 
 % Catch all function for handling messages
 handle(St, Data) ->
@@ -77,20 +77,29 @@ channelHandle(St, {leave, Client}) ->
         true ->
             NewUsers = lists:delete(Client, St#channelSt.users),
             io:fwrite("Channel ~p: ~p left ~n", [St#channelSt.name, Client]),
-            {reply,ok , St#channelSt{users = NewUsers}};
+            {reply, ok, St#channelSt{users = NewUsers}};
         false ->
             {reply, user_not_joined, St}
 
     end;
 
 channelHandle(St, {message_send, Nick, Msg, Client}) ->
+    case lists:member(Client, St#channelSt.users) of
+        true ->
+            io:fwrite("Channel ~p: ~p sent '~p: ~p' ~n", [St#channelSt.name, Client, Nick, Msg]),
+            lists:foreach(fun(User) ->
+                genserver:request(User, {message_receive, St#channelSt.name, Nick, Msg}), io:fwrite("sending to ~p", [User]) end, lists:delete(Client, St#channelSt.users)),
+            {reply, ok, St};
+        %genserver:request(Pid, {message_receive, Channel, Nick, Msg})
+        false ->
+            {reply, user_not_joined, St}
+
+    end;
 
 
-
-channelHandle(St,  Data) ->
+channelHandle(St, Data) ->
     io:fwrite("Channel ~p: Unknown command with data, ~p ~n", [St#channelSt.name, Data]),
     {reply, unknown_command, St}.
-
 
 
 % cd erlang/lab2/cchat && erl -compile *.erl lib/*.erl && erl -noshell -eval "cchat:server()." -eval "cchat:client()."
