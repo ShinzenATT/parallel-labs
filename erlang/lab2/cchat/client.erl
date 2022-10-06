@@ -35,29 +35,20 @@ handle(St, {join, Channel}) ->
 
     %case lists:member(Channel, St#client_st.chatroom) of
     %   true ->
-    Result = genserver:request(St#client_st.server, {join, Channel, self()}),
-    case Result of
-        ok ->
-            ChatRoomList = [Channel | St#client_st.chatroom],
-            {reply, ok, St#client_st{chatroom = ChatRoomList}};
-        user_already_joined ->
-            {reply, {error, user_already_joined, "User already joined channel"}, St}
+
+    try genserver:request(St#client_st.server, {join, Channel, self()}) of
+        Result ->
+            case Result of
+                ok ->
+                    ChatRoomList = [Channel | St#client_st.chatroom],
+                    {reply, ok, St#client_st{chatroom = ChatRoomList}};
+                user_already_joined ->
+                    {reply, {error, user_already_joined, "User already joined channel"}, St}
+            end
+    catch
+        _:_ ->
+            {reply, {error, server_not_reached, "Server not reached"}, St}
     end;
-
-%  false -> {reply, {error, server_not_reached, "Server not reached"}, St}
-%end;
-
-
-%    Res = genserver:request(server, {join, St#client_st.server, {join, Channel, self()}}),
-%   case Res of
-%      ok ->
-%    true ->
-%        {reply, {error, join, "Error joining channel"}, St};
-%   failed ->
-%      {reply, {error, user_already_joined, "Already in channel"}, St};
-% false -> {reply, {error, server_not_reached, "server not availible"}, St}
-%end;
-
 
 % Leave channel
 handle(St, {leave, Channel}) ->
@@ -68,20 +59,26 @@ handle(St, {leave, Channel}) ->
         ok ->
             ChatRoomList = lists:delete(Channel, St#client_st.chatroom),
             {reply, ok, St#client_st{chatroom = ChatRoomList}};
-        true ->
-            {reply, {error, user_not_joined, "User has not joined server"}}
+        Error ->
+            {reply, {error, Error, "User has not joined server or other error"}, St}
     end;
 
 % Sending message (from GUI, to channel)
 handle(St, {message_send, Channel, Msg}) ->
 % TODO: Implement this function
 % {reply, ok, St} ;
-    Res = genserver:request(list_to_atom(Channel), {message_send, St#client_st.nick, Msg, self()}),
-    case Res of
-        ok ->
-            {reply, ok, St};
-        true ->
-            {reply, {error, message_send, "Error sending message"}, St}
+    try genserver:request(list_to_atom(Channel), {message_send, St#client_st.nick, Msg, self()}) of
+        Res ->
+            case Res of
+                ok ->
+                    {reply, ok, St};
+                Error ->
+                    io:fwrite("Error: ~p~n", [Error]),
+                    {reply, {error, Error, "Error sending message"}, St}
+            end
+    catch
+        _:_ ->
+            {reply, {error, server_not_reached, "Server not reached"}, St}
     end;
 
 % This case is only relevant for the distinction assignment!
@@ -108,5 +105,5 @@ handle(St, quit) ->
     {reply, ok, St};
 
 % Catch-all for any unhandled requests
-handle(St, Data) ->
+handle(St, _) ->
     {reply, {error, not_implemented, "Client does not handle this command"}, St}.

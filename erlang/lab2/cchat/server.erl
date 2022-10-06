@@ -34,7 +34,8 @@ start(ServerAtom) ->
     io:fwrite("Server started ~n"),
     io:fwrite("ServerAtom: ~p~n", [ServerAtom]),
     Pid = genserver:start(ServerAtom, initialState(), fun handle/2),
-    io:fwrite("Pid: ~p~n", [Pid]).
+    io:fwrite("Pid: ~p~n", [Pid]),
+    Pid.
 
 
 % Stop the server process registered to the given name,
@@ -56,6 +57,10 @@ handle(St, {join, Channel, Client}) ->
             Result = genserver:request(list_to_atom(Channel), {join, Client}),
             {reply, Result, St#state{channels = [Channel | St#state.channels]}}
     end;
+
+handle(St, stop) ->
+    lists:foreach(fun(Channel) -> genserver:stop(list_to_atom(Channel)) end, St#state.channels),
+    {reply, ok, St};
 
 % Catch all function for handling messages
 handle(St, Data) ->
@@ -87,11 +92,14 @@ channelHandle(St, {message_send, Nick, Msg, Client}) ->
     case lists:member(Client, St#channelSt.users) of
         true ->
             io:fwrite("Channel ~p: ~p sent '~p: ~p' ~n", [St#channelSt.name, Client, Nick, Msg]),
+            spawn(fun() ->
             lists:foreach(fun(User) ->
-                genserver:request(User, {message_receive, St#channelSt.name, Nick, Msg}), io:fwrite("sending to ~p", [User]) end, lists:delete(Client, St#channelSt.users)),
+                genserver:request(User, {message_receive, St#channelSt.name, Nick, Msg}), io:fwrite("sending to ~p", [User]) end, lists:delete(Client, St#channelSt.users))
+                end),
             {reply, ok, St};
         %genserver:request(Pid, {message_receive, Channel, Nick, Msg})
         false ->
+            io:fwrite("Channel ~p: ~p not in channel ~n", [St#channelSt.name, Client]),
             {reply, user_not_joined, St}
 
     end;
