@@ -1,13 +1,13 @@
 package amazed.solver;
 
 import amazed.maze.Maze;
+import jdk.jshell.spi.ExecutionControl;
 
-import java.util.List;
-import java.util.ArrayList;
-import java.util.Map;
-import java.util.HashMap;
-import java.util.Set;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.ConcurrentSkipListSet;
+import java.util.concurrent.ForkJoinPool;
 
 /**
  * <code>ForkJoinSolver</code> implements a solver for
@@ -22,6 +22,7 @@ import java.util.concurrent.ConcurrentSkipListSet;
 public class ForkJoinSolver
     extends SequentialSolver
 {
+    private static final ForkJoinPool pool = new ForkJoinPool();
     /**
      * Creates a solver that searches in <code>maze</code> from the
      * start node to a goal.
@@ -48,6 +49,22 @@ public class ForkJoinSolver
     {
         this(maze);
         this.forkAfter = forkAfter;
+
+    }
+
+    private ForkJoinSolver(Maze maze, Set<Integer> visited, Map<Integer, Integer> predecessor, Stack<Integer> frontier, int forkAfter) {
+        super(maze);
+        this.visited = visited;
+        this.predecessor = predecessor;
+        this.frontier = frontier;
+        this.forkAfter = forkAfter;
+    }
+
+    @Override
+    protected void initStructures() {
+        visited = new ConcurrentSkipListSet<>();
+        predecessor = new HashMap<>();
+        frontier = new Stack<>();
     }
 
     /**
@@ -69,6 +86,24 @@ public class ForkJoinSolver
 
     private List<Integer> parallelSearch()
     {
+        int player = maze.newPlayer(start);
+        frontier.push(start);
+
+        pool.submit(this);
+
+        while (!frontier.empty()) {
+            // get the new node to process
+            int current = frontier.pop();
+
+            if (maze.hasGoal(current)) {
+                // move player to goal
+                maze.move(player, current);
+                // search finished: reconstruct and return path
+                return pathFromTo(start, current);
+            }
+
+        }
+
         return null;
     }
 }
