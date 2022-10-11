@@ -110,4 +110,4 @@ channelHandle(St, Data) ->
     {reply, unknown_command, St}.
 
 
-% cd erlang/lab2/cchat && erl -compile *.erl lib/*.erl && erl -noshell -eval "cchat:server()." -eval "cchat:client()."
+% cd erlang/lab2/cchat && erl -compile *.erl lib/*.erl && erl -noshell -eval "cchat:server()." -eval "cchat:client()." -eval "cchat:client()."
