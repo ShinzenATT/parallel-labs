@@ -1,4 +1,4 @@
-package Lab3.amazed_lab.src.main.amazed.maze;
+package amazed.maze;
 
 import java.awt.EventQueue;
 import java.util.List;
@@ -43,7 +43,7 @@ public class Amazed
      *                         which a parallel task is forked; this value
      *                         is passed to the instance of the solver as
      *                         described in
-     *                         {@link ForkJoinSolver#ForkJoinSolver(Maze, int)}
+     *                         {@link amazed.solver.ForkJoinSolver#ForkJoinSolver(Maze, int)}
      * @param animationDelay   milliseconds of pause between a step and
      *                         the next one in the animation of the
      *                         solution search; if

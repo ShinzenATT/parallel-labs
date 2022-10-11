@@ -1,4 +1,4 @@
-package Lab3.amazed_lab.src.main.amazed.solver;
+package amazed.solver;
 
 import amazed.maze.Maze;
 

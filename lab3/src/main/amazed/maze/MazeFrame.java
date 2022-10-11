@@ -1,4 +1,4 @@
-package Lab3.amazed_lab.src.main.amazed.maze;
+package amazed.maze;
 
 import java.awt.BorderLayout;
 import java.awt.Dimension;
@@ -109,7 +109,7 @@ class MazeFrame
         // to use a non-scrollable, replace all the following statements with:
         // add(panel, BorderLayout.CENTER);
         JScrollPane scrollFrame = new JScrollPane(panel);
-        Dimension screen = Toolkit.getDefaultToolkit().getScreenSize();
+        Dimension screen = java.awt.Toolkit.getDefaultToolkit().getScreenSize();
         int scrWidth = Math.min(board.getWidth(), (int) screen.getWidth()) + 30;
         int scrHeight = Math.min(board.getHeight(), (int) screen.getHeight()) + 50;
         scrollFrame.setPreferredSize(new Dimension(scrWidth, scrHeight));

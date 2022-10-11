@@ -1,4 +1,4 @@
-package Lab3.amazed_lab.src.main.amazed;
+package amazed;
 
 import java.lang.invoke.MethodHandles;
 

@@ -1,4 +1,4 @@
-package Lab3.amazed_lab.src.main.amazed.maze;
+package amazed.maze;
 
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;

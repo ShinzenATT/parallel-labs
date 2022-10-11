@@ -1,4 +1,4 @@
-package Lab3.amazed_lab.src.main.amazed.maze;
+package amazed.maze;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
