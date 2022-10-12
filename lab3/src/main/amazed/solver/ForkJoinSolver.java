@@ -22,17 +22,14 @@ import java.util.concurrent.ForkJoinPool;
 public class ForkJoinSolver
     extends SequentialSolver
 {
-    private static final ForkJoinPool pool = new ForkJoinPool();
+    private int player = -1;
     /**
      * Creates a solver that searches in <code>maze</code> from the
      * start node to a goal.
      *
      * @param maze   the maze to be searched
      */
-    public ForkJoinSolver(Maze maze)
-    {
-        super(maze);
-    }
+    public ForkJoinSolver(Maze maze) { super(maze); }
 
     /**
      * Creates a solver that searches in <code>maze</code> from the
@@ -53,7 +50,7 @@ public class ForkJoinSolver
     }
 
     private ForkJoinSolver(Maze maze, Set<Integer> visited, Map<Integer, Integer> predecessor, Stack<Integer> frontier, int forkAfter) {
-        super(maze);
+        this(maze);
         this.visited = visited;
         this.predecessor = predecessor;
         this.frontier = frontier;
@@ -86,24 +83,91 @@ public class ForkJoinSolver
 
     private List<Integer> parallelSearch()
     {
-        int player = maze.newPlayer(start);
+        if(player == -1) {
+            player = maze.newPlayer(start);
+        }
         frontier.push(start);
+        System.out.println(this + " starts at " + start);
+        int count = 0;
 
-        pool.submit(this);
+
 
         while (!frontier.empty()) {
             // get the new node to process
             int current = frontier.pop();
 
+            if (visited.contains(current)) {
+                continue;
+            }
+
+            visited.add(current);
+            maze.move(player, current);
+            count++;
+            System.out.println(this + " moved to " + current);
+
             if (maze.hasGoal(current)) {
-                // move player to goal
-                maze.move(player, current);
                 // search finished: reconstruct and return path
-                return pathFromTo(start, current);
+                System.out.println("!! " + this + " found goal at " + current);
+                return pathFromTo(current);
+            }
+
+            List<Integer> n = maze.neighbors(current).stream().filter(e -> !visited.contains(e)).toList();
+            System.out.println(this + " has " + n.size() + " neighbors");
+            if(n.size() > 1 && count > forkAfter) {
+
+                List<ForkJoinSolver> tasks = new ArrayList<>();
+                for (int ni: n){
+                    if (!visited.contains(ni)) {
+                        predecessor.put(ni, current);
+                        ForkJoinSolver task = new ForkJoinSolver(maze, visited, (Map<Integer, Integer>) ((HashMap) predecessor).clone(), new Stack<>(), forkAfter);
+                        task.start = ni;
+                        if(player != -1) {
+                            task.player = player;
+                            player = -1;
+                        }
+                        tasks.add(task);
+                    }
+                }
+                for (ForkJoinSolver task: tasks) {
+                    task.fork();
+                }
+                List<Integer> results = null;
+                for (ForkJoinSolver task: tasks) {
+                    var r = task.join();
+                    System.out.println(this + " got result from " + task.start + ": " + r);
+                    if(results != null && r != null && r.size() < results.size()) {
+                        results = r;
+                    } else if (r != null && results == null) {
+                        results = r;
+                    }
+                }
+                return results;
+            }
+            else  if(n.size() > 1){
+                for(int ni: n){
+                    predecessor.put(ni, current);
+                    frontier.push(ni);
+                }
+            }
+            else if(n.size() == 1) {
+                int next = n.get(0);
+                predecessor.put(next, current);
+                frontier.push(next);
             }
 
         }
 
+        System.out.println(this + " found no path");
         return null;
+    }
+
+
+    protected List<Integer> pathFromTo(int goal) {
+        System.out.println(this + " reconstructing path from " + goal + ": " + predecessor);
+        int current = goal;
+        while (predecessor.containsKey(current)) {
+            current = predecessor.get(current);
+        }
+        return super.pathFromTo(current, goal);
     }
 }
