@@ -22,6 +22,7 @@ import java.util.concurrent.ForkJoinPool;
 public class ForkJoinSolver
     extends SequentialSolver
 {
+    /** the player id, is -1 when not set */
     private int player = -1;
     /**
      * Creates a solver that searches in <code>maze</code> from the
@@ -49,6 +50,14 @@ public class ForkJoinSolver
 
     }
 
+    /**
+     * A constrcutor for passing premade states to a recursive task
+     * @param maze the maze to search
+     * @param visited a pointer to the visited nodes
+     * @param predecessor a pointer or copy to the previous path
+     * @param frontier the stack of future nodes to visited, may be an empty stack
+     * @param forkAfter the amounts of nodes to visited before forking
+     */
     private ForkJoinSolver(Maze maze, Set<Integer> visited, Map<Integer, Integer> predecessor, Stack<Integer> frontier, int forkAfter) {
         this(maze);
         this.visited = visited;
@@ -83,12 +92,18 @@ public class ForkJoinSolver
 
     private List<Integer> parallelSearch()
     {
+        // check if the start node is already visited otherwise end the thread
+        if(visited.contains(start)){
+            return null;
+        }
+        //check if thread already has a player defined otherwise make a new one
         if(player == -1) {
             player = maze.newPlayer(start);
         }
+
         frontier.push(start);
         System.out.println(this + " starts at " + start);
-        int count = 0;
+        int count = 0; // counter used for forkafter
 
 
 
@@ -96,6 +111,7 @@ public class ForkJoinSolver
             // get the new node to process
             int current = frontier.pop();
 
+            // if already visited skip to next iteration
             if (visited.contains(current)) {
                 continue;
             }
@@ -111,13 +127,16 @@ public class ForkJoinSolver
                 return pathFromTo(current);
             }
 
+            // get neighbors that are not previously visited
             List<Integer> n = maze.neighbors(current).stream().filter(e -> !visited.contains(e)).toList();
             System.out.println(this + " has " + n.size() + " neighbors");
-            if(n.size() > 1 && count > forkAfter) {
 
+            // if there are multiple neighbors and fork is allowed then fork
+            if(n.size() > 1 && count > forkAfter) {
+                count = 0;
                 List<ForkJoinSolver> tasks = new ArrayList<>();
+                // setup forked threads
                 for (int ni: n){
-                    if (!visited.contains(ni)) {
                         predecessor.put(ni, current);
                         ForkJoinSolver task = new ForkJoinSolver(maze, visited, (Map<Integer, Integer>) ((HashMap) predecessor).clone(), new Stack<>(), forkAfter);
                         task.start = ni;
@@ -126,11 +145,13 @@ public class ForkJoinSolver
                             player = -1;
                         }
                         tasks.add(task);
-                    }
                 }
+                // start the threads
                 for (ForkJoinSolver task: tasks) {
                     task.fork();
                 }
+
+                // find a suitable result if any and return it
                 List<Integer> results = null;
                 for (ForkJoinSolver task: tasks) {
                     var r = task.join();
@@ -143,12 +164,14 @@ public class ForkJoinSolver
                 }
                 return results;
             }
+            // if fork not permitted then just add all neighbors to frontier
             else  if(n.size() > 1){
                 for(int ni: n){
                     predecessor.put(ni, current);
                     frontier.push(ni);
                 }
             }
+            // add a single node to frontier
             else if(n.size() == 1) {
                 int next = n.get(0);
                 predecessor.put(next, current);
@@ -157,11 +180,17 @@ public class ForkJoinSolver
 
         }
 
+        // on fail
         System.out.println(this + " found no path");
         return null;
     }
 
 
+    /**
+     * searches trough the predecessor to find the true start point
+     * @param goal the goal node
+     * @return the path from start to goal
+     */
     protected List<Integer> pathFromTo(int goal) {
         System.out.println(this + " reconstructing path from " + goal + ": " + predecessor);
         int current = goal;
