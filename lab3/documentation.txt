@@ -1,0 +1,5 @@
+It works simelarly to the sequentail algorithm where it moves to a unvisited node and adds adjecent nodes to the frontier. 
+The difference is that after a certain amount of moves required by the frokAfter argument it will fork for each adjacent unvisited node (if there's more than 1 adjacent node) where they will continue exploring.
+Each thread will do the same. Each forked thread will share the visited set however it will have a cloned copy of the predecessor and a new frontier stack. 
+When a thread is done it returns a list if a goal is found or null and the parent thread will check the results of the forked threads in attempt to
+return a list if any of them returned that otherwise null.
