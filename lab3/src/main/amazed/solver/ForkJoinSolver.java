@@ -93,21 +93,16 @@ public class ForkJoinSolver
     private List<Integer> parallelSearch()
     {
         // check if the start node is already visited otherwise end the thread
-        if(visited.contains(start)){
-            return null;
+        if(!visited.contains(start)){
+            frontier.push(start);
         }
-        //check if thread already has a player defined otherwise make a new one
-        if(player == -1) {
-            player = maze.newPlayer(start);
-        }
-
-        frontier.push(start);
         System.out.println(this + " starts at " + start);
         int count = 0; // counter used for forkafter
 
 
 
         while (!frontier.empty()) {
+
             // get the new node to process
             int current = frontier.pop();
 
@@ -115,9 +110,15 @@ public class ForkJoinSolver
             if (visited.contains(current)) {
                 continue;
             }
-
             visited.add(current);
-            maze.move(player, current);
+
+            //check if thread already has a player defined otherwise make a new one
+            if(player == -1) {
+                player = maze.newPlayer(current);
+            } else {
+                maze.move(player, current);
+            }
+
             count++;
             System.out.println(this + " moved to " + current);
 
@@ -138,12 +139,15 @@ public class ForkJoinSolver
                 // setup forked threads
                 for (int ni: n){
                         predecessor.put(ni, current);
-                        ForkJoinSolver task = new ForkJoinSolver(maze, visited, (Map<Integer, Integer>) ((HashMap) predecessor).clone(), new Stack<>(), forkAfter);
-                        task.start = ni;
+                        ForkJoinSolver task;
                         if(player != -1) {
+                            task = new ForkJoinSolver(maze, visited, (Map<Integer, Integer>) ((HashMap) predecessor).clone(), frontier, forkAfter);
                             task.player = player;
                             player = -1;
+                        } else {
+                            task = new ForkJoinSolver(maze, visited, (Map<Integer, Integer>) ((HashMap) predecessor).clone(), new Stack<>(), forkAfter);
                         }
+                        task.start = ni;
                         tasks.add(task);
                 }
                 // start the threads
@@ -155,7 +159,7 @@ public class ForkJoinSolver
                 List<Integer> results = null;
                 for (ForkJoinSolver task: tasks) {
                     var r = task.join();
-                    System.out.println(this + " got result from " + task.start + ": " + r);
+                    System.out.println(this + " got result from " + task + ": " + r);
                     if(results != null && r != null && r.size() < results.size()) {
                         results = r;
                     } else if (r != null && results == null) {
