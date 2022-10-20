@@ -107,10 +107,9 @@ public class ForkJoinSolver
             int current = frontier.pop();
 
             // if already visited skip to next iteration
-            if (visited.contains(current)) {
+            if(!visited.add(current)){
                 continue;
             }
-            visited.add(current);
 
             //check if thread already has a player defined otherwise make a new one
             if(player == -1) {
